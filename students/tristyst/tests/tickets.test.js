@@ -1,11 +1,71 @@
 
-const test = require('node:test');
+const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawn } = require('node:child_process');
 
 const DATA_FILE = path.join(__dirname, '..', 'src', 'data', 'tickets.json');
-const API_URL = 'http://localhost:3000';
+const SERVER_FILE = path.join(__dirname, '..', 'src', 'server.js');
+
+const PORT = 3101;
+const API_URL = `http://127.0.0.1:${PORT}`;
+
+let server;
+let serverOutput = '';
+
+before(async () => {
+    server = spawn(process.execPath, [SERVER_FILE], {
+        env: {
+            ...process.env,
+            PORT: String(PORT)
+        },
+        stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    server.stdout.on('data', data => {
+        serverOutput += data.toString();
+    });
+
+    server.stderr.on('data', data => {
+        serverOutput += data.toString();
+    });
+
+    let ready = false;
+
+    for (let attempt = 0; attempt < 50; attempt++) {
+        if (server.exitCode !== null) {
+            break;
+        }
+
+        try {
+            const response = await fetch(`${API_URL}/health`);
+
+            if (response.ok) {
+                ready = true;
+                break;
+            }
+        } catch {
+            // Server is still starting.
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    if (!ready) {
+        server.kill();
+
+        throw new Error(
+            `API server did not start.\n${serverOutput}`
+        );
+    }
+});
+
+after(() => {
+    if (server && server.exitCode === null) {
+        server.kill();
+    }
+});
 
 test('Campus Helpdesk API', async (t) => {
     await t.test('GET /health returns status ok', async () => {
@@ -40,7 +100,9 @@ test('Campus Helpdesk API', async (t) => {
         const data = await response.json();
 
         assert.equal(response.status, 200);
-        assert.ok(data.count > 0);
+        assert.ok(
+            data.tickets.some(ticket => ticket.title === 'Test ticket')
+        );
     });
 
     await t.test('PATCH updates ticket status', async () => {
