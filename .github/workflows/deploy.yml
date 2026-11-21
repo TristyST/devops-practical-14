@@ -1,0 +1,99 @@
+name: Campus Helpdesk CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: students/tristyst
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: students/tristyst/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  build-and-deploy:
+    name: Build, push and deploy
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./students/tristyst
+          push: true
+          tags: |
+            tristyst/campus-helpdesk-api:latest
+            tristyst/campus-helpdesk-api:${{ github.sha }}
+
+      - name: Configure SSH
+        env:
+          GCE_SSH_KEY_B64: ${{ secrets.GCE_SSH_KEY_B64 }}
+          GCE_HOST: ${{ secrets.GCE_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s' "$GCE_SSH_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          ssh-keyscan -H "$GCE_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy to Google Cloud VM
+        env:
+          GCE_HOST: ${{ secrets.GCE_HOST }}
+          GCE_USER: ${{ secrets.GCE_USER }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$GCE_USER@$GCE_HOST" '
+            set -e
+
+            docker pull tristyst/campus-helpdesk-api:latest
+
+            docker stop campus-helpdesk-api || true
+            docker rm campus-helpdesk-api || true
+
+            docker volume create campus-helpdesk-data
+
+            docker run -d \
+              --name campus-helpdesk-api \
+              --restart unless-stopped \
+              -p 3000:3000 \
+              -v campus-helpdesk-data:/app/src/data \
+              tristyst/campus-helpdesk-api:latest
+          '
