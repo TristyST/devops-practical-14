@@ -202,26 +202,29 @@ Never commit credentials, private keys, access tokens, or `.env` files to the re
 ## Project Structure
 
 ```text
-students/tristyst/
+devops-practical-14/
 ├── .github/
 │   └── workflows/
-├── infra/
-│   ├── main.tf
-│   └── .terraform.lock.hcl
-├── src/
-│   ├── data/
-│   │   └── tickets.json
-│   ├── server.js
-│   └── tickets.js
-├── tests/
-│   └── tickets.test.js
-├── .dockerignore
-├── .gitignore
-├── Dockerfile
-├── package.json
-├── package-lock.json
+│       └── deploy.yml
+├── students/
+│   └── tristyst/
+│       ├── infra/
+│       │   ├── main.tf
+│       │   └── .terraform.lock.hcl
+│       ├── src/
+│       │   ├── data/
+│       │   │   └── tickets.json
+│       │   ├── server.js
+│       │   └── tickets.js
+│       ├── tests/
+│       │   └── tickets.test.js
+│       ├── .dockerignore
+│       ├── .gitignore
+│       ├── Dockerfile
+│       ├── package.json
+│       ├── package-lock.json
+│       └── README.md
 └── README.md
-```
 
 ## Security and Cost Considerations
 
